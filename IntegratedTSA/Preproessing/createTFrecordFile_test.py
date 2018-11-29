@@ -14,7 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-# @Time    : 28/11/18 14:39
+# @Time    : 28/11/18 19:15
 # @Author  : Leiming Du
 # @Email   : duleimingdo@gmail.com
-# @FileName: __init__.py.py
+# @FileName: createTFrecordFile_test.py
+
+from createTFrecordFile import CreateTFrecordData
+
+file_name = 'data/'
