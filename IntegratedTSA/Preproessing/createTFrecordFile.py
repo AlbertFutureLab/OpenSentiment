@@ -75,6 +75,8 @@ class CreateTFrecordData(object):
         :param padding_tag: padding tag
         :return: a tf.train.Example file.
         """
+        assert(len(inputs) == len(masks))
+
         # if the length of inputs exceeds the max_sequence_length, cut the inputs down.
         if len(inputs) > max_senquence_length:
             inputs = inputs[:(max_senquence_length-1)]
@@ -98,7 +100,35 @@ class CreateTFrecordData(object):
 
         return tf.train.Example(features=tf.train.Features(feature=feature_collection))
 
-    def sequence_serialized_to_file(self, filename, inputs, masks, labels, max_sentence_length=100):
+    def max_sequence_example(self, inputs, masks, label):
+        """
+        Given inputs, masks and label, return tf.train.SequenceExample object.
+        :param inputs: a list of ids.
+        :param masks: a list of masks.
+        :param label: one label.
+        :return: a tf.train.SequenceExample
+        """
+        assert(len(inputs) == len(masks))
+
+        input_feature = [self._int64_feature(input_) for input_ in inputs]
+        mask_feature = [self._int64_feature(mask_) for mask_ in masks]
+        label_feature = self._int64_feature(label)
+        length_feature = self._int64_feature(len(inputs))
+
+        feature_collection = {
+            'inputs': tf.train.FeatureList(feature=input_feature),  # the feature in tf.train.FeatureList should be a list
+            'masks': tf.train.FeatureList(feature=mask_feature),
+        }
+
+        context_features = {
+            'label': label_feature,
+            'length': length_feature
+        }
+
+        return tf.train.SequenceExample(context=tf.train.Features(feature=context_features),
+            feature_lists=tf.train.FeatureLists(feature_list=feature_collection))
+
+    def sequence_serialized_to_file(self, filename, inputs, masks, labels, fixed=False, max_sentence_length=100):
         """
         Given several inputs and relevant features, write the serialized object into file.
         :param filename: The path to the serialized file.
@@ -112,13 +142,18 @@ class CreateTFrecordData(object):
         writer = tf.python_io.TFRecordWriter(filename)
 
         tf.logging.info('Starting to write the serialized data...')
-        for i in tqdm(range(len(inputs)), desc='Processing dataset'):
-            writer.write(self.make_fixed_length_example(inputs=inputs[i], masks=masks[i],
-                                                        label=labels[i], max_senquence_length=max_sentence_length).SerializeToString())
+        if fixed:
+            for i in tqdm(range(len(inputs)), desc='Processing dataset'):
+                writer.write(self.make_fixed_length_example(inputs=inputs[i], masks=masks[i],
+                                                            label=labels[i], max_senquence_length=max_sentence_length).SerializeToString())
+        else:
+            for i in tqdm(range(len(inputs)), desc='Processing dataset'):
+                writer.write(self.max_sequence_example(inputs=inputs[i], masks=masks[i],
+                                                            label=labels[i]).SerializeToString())
         writer.close()  # must close the writer, otherwise you cannot read the serialized file.
         tf.logging.info('Finish writing the serialized data. Totally wirte {} instances.'.format(len(inputs)))
 
-    def get_padded_batch(self, file_list, batch_size, max_sequence_length=100, epoch=10000, num_enqueuing_thread=1, shuffle=True):
+    def get_padded_batch(self, file_list, batch_size, fixed=False, max_sequence_length=100, epoch=10000, num_enqueuing_thread=1, shuffle=True):
         """
         Read examples form a list of filename with 'epoch' epoches.
         :param file_list: a list of filenames.
@@ -137,17 +172,29 @@ class CreateTFrecordData(object):
         reader = tf.TFRecordReader()
         _, serialized_example = reader.read(file_queue)
 
-        features = {
-            'inputs': tf.FixedLenFeature(shape=[max_sequence_length], dtype=tf.int64),
-            'masks': tf.FixedLenFeature(shape=[max_sequence_length], dtype=tf.int64),
-            'label': tf.FixedLenFeature(shape=[], dtype=tf.int64),
-            'length': tf.FixedLenFeature(shape=[], dtype=tf.int64)
-        }
-
-        sequence = tf.parse_single_example(serialized_example, features=features)
-
-        # parse each example
-        output_sequence = [sequence['inputs'], sequence['masks'], sequence['label'], sequence['length']]
+        if fixed:
+            features = {
+                'inputs': tf.FixedLenFeature(shape=[max_sequence_length], dtype=tf.int64),
+                'masks': tf.FixedLenFeature(shape=[max_sequence_length], dtype=tf.int64),
+                'label': tf.FixedLenFeature(shape=[], dtype=tf.int64),
+                'length': tf.FixedLenFeature(shape=[], dtype=tf.int64)
+            }
+            # parse each example
+            sequence = tf.parse_single_example(serialized_example, features=features)
+            output_sequence = [sequence['inputs'], sequence['masks'], sequence['label'], sequence['length']]
+        else:
+            features = {
+                'inputs': tf.FixedLenSequenceFeature(shape=[], dtype=tf.int64),
+                'masks': tf.FixedLenSequenceFeature(shape=[], dtype=tf.int64),
+            }
+            context_feature = {
+                'label': tf.FixedLenFeature(shape=[], dtype=tf.int64),
+                'length': tf.FixedLenFeature(shape=[], dtype=tf.int64)
+            }
+            # parse each sequence example
+            context_parsed, sequence = tf.parse_single_sequence_example(serialized_example, context_features=context_feature,
+                                                        sequence_features=features)
+            output_sequence = [sequence['inputs'], sequence['masks'], context_parsed['label'], context_parsed['length']]
 
         if shuffle:
             if num_enqueuing_thread < 2:

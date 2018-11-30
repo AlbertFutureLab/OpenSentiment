@@ -29,16 +29,24 @@ def main():
     tfrecord_filename = '../data/dataset_test/serialized_dataset.tfrecords'
 
     # Given inputs, create the dataset
-    inputs = np.random.rand(300, 80).astype(int).tolist()
-    masks = np.random.rand(300, 80).astype(int).tolist()
-    label = np.random.rand(300).astype(int).tolist()
 
-    create_tf_tool.sequence_serialized_to_file(filename=tfrecord_filename, inputs=inputs, masks=masks, labels=label)
+    # ---- test fixed length ----
+    # inputs = np.random.rand(300, 80).astype(int).tolist()
+    # masks = np.random.rand(300, 80).astype(int).tolist()
+    # label = np.random.rand(300).astype(int).tolist()
+
+    # ---- test variable length ----
+    inputs = [[1, 2, 31, 2], [2, 3, 1, 2, 3, 23, 31, 1], [1, 2]]
+    masks = [[1, 2, 31, 2], [2, 3, 1, 2, 3, 23, 31, 1], [1, 2]]
+    label = [1, 2, 1]
+
+    create_tf_tool.sequence_serialized_to_file(filename=tfrecord_filename, inputs=inputs, masks=masks, labels=label, fixed=False)
 
     # Read tensors from tfrecord_filename
     read_inputs, read_masks, read_labels, read_lengths = create_tf_tool.get_padded_batch([tfrecord_filename],
                                                                                          batch_size=2, epoch=2,
-                                                                                         shuffle=True, num_enqueuing_thread=3
+                                                                                         shuffle=True, num_enqueuing_thread=3,
+                                                                                         fixed=False
                                                                                          )
 
     with tf.Session(config=tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))) as sess:
