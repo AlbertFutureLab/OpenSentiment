@@ -47,11 +47,12 @@ class data_utils(object):
 
         if not memory_first:
             with open(filename, 'r') as fr:
-                original_embedding = fr.readlines()
-                for single_line in original_embedding:
-                    single_line_split = single_line.strip().split()
+                single_original_embedding = fr.readline()
+                while single_original_embedding:
+                    single_line_split = single_original_embedding.strip().split()
                     word2id.append(single_line_split[0])
                     embedding_to_serialized.append(single_line_split[1:])
+                    single_original_embedding = fr.readline()
         else:
             original_embedding = np.loadtxt(filename, dtype=str)
             word2id = original_embedding[:, 0]
