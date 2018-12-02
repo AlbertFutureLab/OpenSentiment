@@ -18,11 +18,18 @@
 # @Author  : Leiming Du
 # @Email   : duleimingdo@gmail.com
 # @FileName: createTFrecordFile_test.py
+
+# To add current dir to search path to prevent some errors
+import sys
+import os
 import numpy as np
 import tensorflow as tf
 from createTFrecordFile import CreateTFrecordData
 
 tf.logging.set_verbosity(tf.logging.INFO) # setting the info log visible
+
+# To add current dir to search path to prevent some errors
+sys.path.append(os.getcwd())
 
 def main():
     create_tf_tool = CreateTFrecordData()

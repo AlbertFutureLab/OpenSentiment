@@ -18,7 +18,7 @@
 # @Author  : Leiming Du
 # @Email   : duleimingdo@gmail.com
 # @FileName: dataUtils.py
-
+from collections import namedtuple
 import os, time, sys
 reload(sys)
 sys.setdefaultencoding('utf8') # To prevent any coding errores in python2
@@ -26,6 +26,10 @@ sys.setdefaultencoding('utf8') # To prevent any coding errores in python2
 import cPickle as pickle
 import gzip
 import numpy as np
+import codecs
+
+# To add current dir to search path to prevent some errors
+sys.path.append(os.getcwd())
 
 class data_utils(object):
     def __init__(self):
@@ -89,3 +93,70 @@ class data_utils(object):
             pickle.dump(serialized_object, fw)
 
         print('Successfully write the serialized object to the file [{}]!'.format(filename))
+
+    def read_txt_file(self, filename, dic_path):
+        """
+        Read the txt tweets file. Here is the format of the file:
+        First line: tweets or sentence.
+        Second line: keywords.
+        Third line: label.
+        :param filename: The path to file
+        :return: (texts(ids), masks, labels) tuple
+        """
+        # Build the Sentence Instance
+        SenInst = namedtuple('Instance', 'text keyword label mask')
+        instance_lists = []
+
+        with codecs.open(filename, 'r', encoding='utf8') as fr:
+            text = fr.readline().strip().lower()
+            keyword = fr.readline().strip().lower()
+            label = fr.readline().strip()
+            while text:
+                if label == '-1':  # Negative
+                    real_label = 0
+                elif label == '0':  # Netrual
+                    real_label = 1
+                elif label == '1':  # Positive
+                    real_label = 2
+                else:
+                    raise Exception('Something wrong when reading the label.')
+                text = text.split()
+                keyword = keyword.split()
+                keyword_location = text.index(u'$t$')
+
+                # Create mask vector
+                mask = [0]*keyword_location
+                mask.extend([1]*len(keyword))
+                mask.extend([0]*(len(text)-1-keyword_location))
+
+                # Create new text
+                new_text = text[:keyword_location]
+                new_text.extend(keyword)
+                new_text.extend(text[(keyword_location+1):])
+
+                # add the instance to list
+                instance_lists.append(SenInst(text=new_text, keyword=keyword, label=real_label, mask=mask))
+
+                text = fr.readline().strip().lower()
+                keyword = fr.readline().strip().lower()
+                label = fr.readline().strip()
+        dic_list = self.read_gzip_serialized_file(dic_path)
+        word2id = {k: v for v, k in enumerate(dic_list)}
+
+        inputs = []
+        masks = []
+        labels = []
+        for single_instance in instance_lists:
+            inputs.append(self.text_to_ids(single_instance.text, word2id=word2id))
+            masks.append(single_instance.mask)
+            labels.append(single_instance.label)
+        return inputs, masks, labels
+
+    def text_to_ids(self, text, word2id):
+        """
+        Give a list of words and dic, change it to a list of ids.
+        :param text: a list of words.
+        :param word2id: a dict where key: word, value: id
+        :return: a list of ids.
+        """
+        return [word2id.get(x) if word2id.get(x) else word2id.get('unk') for x in text]

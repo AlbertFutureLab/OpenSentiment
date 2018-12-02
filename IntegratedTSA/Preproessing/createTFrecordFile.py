@@ -19,6 +19,7 @@
 # @Email   : duleimingdo@gmail.com
 # @FileName: createTFrecordFile.py
 
+# To add current dir to search path to prevent some errors
 import os, time, sys
 from tqdm import tqdm
 reload(sys)
@@ -27,6 +28,9 @@ sys.setdefaultencoding('utf8') # To prevent any coding errores in python2
 import math
 import tensorflow as tf
 import numpy as np
+
+# To add current dir to search path to prevent some errors
+sys.path.append(os.getcwd())
 
 QUEUE_CAPACITY = 500
 SHUFFLE_MIN_AFTER_DEQUEUE = QUEUE_CAPACITY // 5
