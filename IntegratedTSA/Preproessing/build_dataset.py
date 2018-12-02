@@ -31,9 +31,9 @@ def main():
     data_tools = data_utils()
 
     # Generate the word dic and embedding file
-    # data_tools.generate_dic_embedding(filename=param_and_config.config.get('original_embedding_path'),
-    #                                   dic_path=param_and_config.config.get('dic_path'),
-    #                                   final_embedding_path=param_and_config.config.get('embedding_path'))
+    data_tools.generate_dic_embedding(filename=param_and_config.config.get('original_embedding_path'),
+                                      dic_path=param_and_config.config.get('dic_path'),
+                                      final_embedding_path=param_and_config.config.get('embedding_path'))
 
     # Read the raw English tweets and write them to tfrecords
     raw_data_path = '../data/Tweets/English/raw'

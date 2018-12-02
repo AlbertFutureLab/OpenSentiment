@@ -29,7 +29,7 @@ import numpy as np
 import codecs
 
 # To add current dir to search path to prevent some errors
-sys.path.append(os.getcwd())
+sys.path.append('../')
 
 class data_utils(object):
     def __init__(self):
@@ -65,7 +65,10 @@ class data_utils(object):
 
         # Serialize the dic and final embedding_path to disk
         self.write_gzip_serialized_file(serialized_object=word2id, filename=dic_path)
-        self.write_gzip_serialized_file(serialized_object=embedding_to_serialized, filename=final_embedding_path)
+
+        # Here, using np.savetxt may have a better disk usage instead of gzip.serialized.
+        np.savetxt(fname=final_embedding_path, X=embedding_to_serialized)
+        # self.write_gzip_serialized_file(serialized_object=embedding_to_serialized, filename=final_embedding_path)
 
     def read_gzip_serialized_file(self, filename):
         """

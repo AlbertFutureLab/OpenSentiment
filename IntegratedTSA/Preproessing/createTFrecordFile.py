@@ -30,7 +30,7 @@ import tensorflow as tf
 import numpy as np
 
 # To add current dir to search path to prevent some errors
-sys.path.append(os.getcwd())
+sys.path.append('../')
 
 QUEUE_CAPACITY = 500
 SHUFFLE_MIN_AFTER_DEQUEUE = QUEUE_CAPACITY // 5

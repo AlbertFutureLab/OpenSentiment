@@ -29,7 +29,7 @@ from createTFrecordFile import CreateTFrecordData
 tf.logging.set_verbosity(tf.logging.INFO) # setting the info log visible
 
 # To add current dir to search path to prevent some errors
-sys.path.append(os.getcwd())
+sys.path.append('../')
 
 def main():
     create_tf_tool = CreateTFrecordData()
