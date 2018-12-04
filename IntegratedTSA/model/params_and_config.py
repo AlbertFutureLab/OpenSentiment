@@ -21,7 +21,7 @@
 
 # To add current dir to search path to prevent some errors
 import sys, os
-sys.path.append(os.getcwd())
+sys.path.append('../')
 
 class paramsAndConfig(object):
     def __init__(self):
@@ -36,11 +36,11 @@ class paramsAndConfig(object):
             'char_embedding': False,
 
             # word_embedding && char_embedding config
-            'word_dimension': 100,
-            'char_dimension': 50,
+            'word_dimension': 25,
+            'char_dimension': 10,
 
             # mask dim
-            'mask_dim': 50,
+            'mask_dim': 10,
 
             # LSTM hidden units config
             'hidden_dimension': 300,
@@ -55,7 +55,7 @@ class paramsAndConfig(object):
             'dropout_rate': 0.4,
 
             # logits config
-            'n_classes': 3
+            'n_classes': 3,
         }
 
         # config file

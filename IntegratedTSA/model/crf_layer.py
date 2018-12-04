@@ -23,8 +23,9 @@
 import sys, os
 
 from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import array_ops
 
-sys.path.append(os.getcwd())
+sys.path.append('../')
 
 import tensorflow as tf
 
@@ -40,7 +41,7 @@ class crf_layer(object):
         :return: a matrix of alpha
         """
         # split the first and the rest of the inputs in preparation for the forward algorithm.
-        first_input = tf.slice(self.inputs, begin=[0, 0, 0], size=[-1, 1, -1])
+        first_input = array_ops.slice(self.inputs, [0, 0, 0], [-1, 1, -1])
         initial_state = tf.squeeze(first_input)
 
         # if max_length of inputs is 1, simply return first_inpu
@@ -49,7 +50,7 @@ class crf_layer(object):
 
         # else: do forward computation
         def _multi_seq_fn():
-            rest_of_input = tf.slice(self.inputs, begin=[0, 1, 0], size=[-1, -1, -1])
+            rest_of_input = array_ops.slice(self.inputs, [0, 1, 0], [-1, -1, -1])
 
             forward_cell = tf.contrib.crf.CrfForwardRnnCell(self.transition_prob)
             alphas, _ = tf.nn.dynamic_rnn(
@@ -62,7 +63,7 @@ class crf_layer(object):
             final_alpha = tf.concat([first_input, alphas], axis=1)
             return final_alpha
 
-        max_sequence_length = max(self.sequence_lengths)
+        max_sequence_length = array_ops.shape(self.inputs)[1]
         return control_flow_ops.cond(pred=tf.equal(max_sequence_length, 1),
                                true_fn=_single_seq_fn,
                                false_fn=_multi_seq_fn)
@@ -87,14 +88,14 @@ class crf_layer(object):
         inputs_reverse = _reverse(input_=self.inputs, seq_length=self.sequence_lengths,
                                   seq_dim=time_dim, batch_dim=batch_dim)
 
-        first_input = tf.slice(inputs_reverse, [0, 0, 0], [-1, 1, -1])
+        first_input = array_ops.slice(inputs_reverse, [0, 0, 0], [-1, 1, -1])
         initial_state = tf.squeeze(first_input)
 
         def _single_seq_fn():
             return first_input
 
         def _multi_seq_fn():
-            rest_of_input = tf.slice(inputs_reverse, [0, 1, 0], [-1, -1, -1])
+            rest_of_input = array_ops.slice(inputs_reverse, [0, 1, 0], [-1, -1, -1])
             # Compute the alpha values in the forward algorithm in order to get the
             # partition function.
             backward_cell = tf.contrib.crf.CrfForwardRnnCell(self.transition_prob)
@@ -109,7 +110,7 @@ class crf_layer(object):
                                      seq_dim=time_dim, batch_dim=batch_dim)
             return betas_reverse
 
-        max_sequence_length = max(self.sequence_lengths)
+        max_sequence_length = array_ops.shape(self.inputs)[1]
         return control_flow_ops.cond(pred=tf.equal(max_sequence_length, 1),
                                true_fn=_single_seq_fn,
                                false_fn=_multi_seq_fn)
@@ -120,7 +121,7 @@ class crf_layer(object):
         :return:
         """
         return tf.contrib.crf.crf_log_norm(inputs=self.inputs,
-                                           sequence_length=self.sequence_lengths,
+                                           sequence_lengths=self.sequence_lengths,
                                            transition_params=self.transition_prob)
 
     def crf_output_prob(self):
