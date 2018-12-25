@@ -42,7 +42,7 @@ def main():
                                  dic_path=param_and_config.config.get('dic_path'))
         tf_data_creation.sequence_serialized_to_file(filename=param_and_config.config.get(data),
                                                      inputs=inputs, masks=masks, labels=labels,
-                                                     fixed=False, max_sentence_length=300)
+                                                     fixed=False, max_sentence_length=100)
 
     # Test whether the tfrecords is ok.
     for data in ['train', 'dev', 'test']:

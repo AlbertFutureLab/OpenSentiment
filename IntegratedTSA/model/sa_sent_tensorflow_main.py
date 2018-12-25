@@ -29,6 +29,8 @@ from Preproessing.dataUtils import data_utils
 import tensorflow as tf
 from crf_layer import crf_layer
 import tensorflow_hub as hub
+import pandas as pd
+import math
 
 class Sa_Sent_Tensorflow(object):
     def __init__(self):
@@ -42,10 +44,13 @@ class Sa_Sent_Tensorflow(object):
         self.word2id = {k:v for v, k in enumerate(self.dic)}
 
         if self.params.get('word_embedding'):
-            # self.embedding = self.data_tool.read_gzip_serialized_file(self.config.get('embedding_path'))
-            self.embedding = np.loadtxt(fname=self.config.get('embedding_path'), dtype=np.float32)
+            self.embedding = pd.read_csv(filepath_or_buffer=self.config.get('embedding_path'), sep=' ').values
+            self.embedding = tf.Variable(
+                initial_value=self.embedding, trainable=False, name='word_embedding_table', dtype=tf.float32
+            )
 
-        self.transition = tf.get_variable(name='transition', shape=[2, 2], dtype=tf.float32, trainable=True)
+        self.transition = tf.get_variable(name='transition', shape=[2, 2], dtype=tf.float32, trainable=True,
+                                          initializer=tf.random_normal_initializer)
 
     def my_model(self, features, labels, mode):
         """
@@ -91,7 +96,8 @@ class Sa_Sent_Tensorflow(object):
                 name='_mask_embedding',
                 dtype=tf.float32,
                 shape=[2, self.params.get('mask_dim')],
-                trainable=True
+                trainable=True,
+                initializer=tf.uniform_unit_scaling_initializer()
             )
             mask_embedding = tf.nn.embedding_lookup(_mask_embedding, masks, name='mask_embedding')
 
@@ -103,11 +109,13 @@ class Sa_Sent_Tensorflow(object):
             for i in range(self.params.get('layer_num')):
                 lstm_output = self.add_lstm_layer(inputs=lstm_output, length=length, layer_name=i)
 
-            lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
-                                                            units=self.params.get('word_dimension'))
+            if self.params.get('if_residual'):
+                lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
+                                                            units=self.params.get('word_dimension'),
+                                                                bias_initializer=tf.glorot_uniform_initializer())
         # CRF layer
         with tf.variable_scope('crf_layer',reuse=tf.AUTO_REUSE) as crf_layer_layer:
-            crf_input = tf.layers.dense(lstm_output, units=2)
+            crf_input = tf.layers.dense(lstm_output, units=2, bias_initializer=tf.glorot_uniform_initializer())
             crf_layer_ = crf_layer(inputs=crf_input, sequence_lengths=length, transition_prob=self.transition)
             crf_output = crf_layer_.crf_output_prob()[:, :, -1]  # The size should be batch_size * seq_len
 
@@ -123,25 +131,26 @@ class Sa_Sent_Tensorflow(object):
 
         # logits layer
         with tf.variable_scope('logits', reuse=tf.AUTO_REUSE) as logits_layer:
-            logits = tf.layers.dense(sentiment_vector, self.params.get('n_classes'))
+            logits = tf.layers.dense(sentiment_vector, self.params.get('n_classes'), bias_initializer=tf.glorot_uniform_initializer())
 
             # Compute predictions
             predicted_classes = tf.argmax(logits, axis=-1)
             if mode == tf.estimator.ModeKeys.PREDICT:
                 predictions = {
-                    'sentiment': tf.expand_dims(predicted_classes, axis=-1),
+                    'sentiment': predicted_classes,
                     'prob': tf.nn.softmax(logits),
                     'logits': logits
                 }
                 return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
             # Compute loss.
-            losses = tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+            losses = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(indices=labels, depth=3), logits=logits))
+            tf.summary.scalar('loss', losses)
 
             # Compute evaluation metrics.
             accuracy = tf.metrics.accuracy(labels=labels,
                                            predictions=predicted_classes,
-                                           name='accuracy_op')
+                                           name='accuracy_op')[1]
             metrics = {'accuracy': accuracy}
             # Write to tensorboard
             tf.summary.scalar('accuracy', accuracy[1])
@@ -153,10 +162,10 @@ class Sa_Sent_Tensorflow(object):
 
             # Create the train_op in training mode
             assert mode == tf.estimator.ModeKeys.TRAIN
-            if self.params.get('learning_algorithm' == 'sgd'):
-                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.params.get('learning_rate'))
-            elif self.params.get('learning_algorithm' == 'adam'):
-                optimizer = tf.train.AdamOptimizer(learning_rate=self.params.get('learning_rate'))
+            if self.config.get('learning_algorithm') == 'sgd':
+                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.config.get('learning_rate'))
+            elif self.config.get('learning_algorithm') == 'adam':
+                optimizer = tf.train.AdamOptimizer(learning_rate=self.config.get('learning_rate'))
             else:
                 raise Exception('You must specify the learning algorithm.')
             train_op = optimizer.minimize(loss=losses, global_step=tf.train.get_global_step())
@@ -209,7 +218,8 @@ class Sa_Sent_Tensorflow(object):
                 name='_mask_embedding',
                 dtype=tf.float32,
                 shape=[2, self.params.get('mask_dim')],
-                trainable=True
+                trainable=True,
+                initializer=tf.uniform_unit_scaling_initializer()
             )
             mask_embedding = tf.nn.embedding_lookup(_mask_embedding, masks, name='mask_embedding')
 
@@ -221,8 +231,10 @@ class Sa_Sent_Tensorflow(object):
             for i in range(self.params.get('layer_num')):
                 lstm_output = self.add_lstm_layer(inputs=lstm_output, length=length, layer_name=i)
 
-            lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
-                                                            units=self.params.get('word_dimension')+self.params.get('mask_dim'))
+            if self.params.get('if_residual'):
+                lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
+                                                            units=self.params.get('word_dimension')+self.params.get('mask_dim'),
+                                                                bias_initializer=tf.glorot_normal_initializer())
 
         # CRF layer
         with tf.variable_scope('crf_layer', reuse=tf.AUTO_REUSE) as crf_layer_layer:
@@ -235,42 +247,52 @@ class Sa_Sent_Tensorflow(object):
 
             # There are some problems. using tf.einsum, the tensor would not get a defined shape. Then where would be some
             # problems in later usage.
-            # sentiment_vector = tf.squeeze(
-            #     tf.einsum('aij,ajk->aik', crf_output, lstm_output))  # output shape is batch_size * embedding_dim
+            # sentiment_vector = tf.einsum('aij,ajk->aik', crf_output, lstm_output)  # output shape is batch_size * embedding_dim
 
-            sentiment_vector = tf.squeeze(tf.matmul(crf_output, lstm_output))
+            # sentiment_vector = tf.squeeze(tf.matmul(crf_output, lstm_output))
+            sentiment_vector = tf.matmul(crf_output, lstm_output)
 
         # logits layer
         with tf.variable_scope('logits', reuse=tf.AUTO_REUSE) as logits_layer:
-            logits = tf.layers.dense(inputs=sentiment_vector, units=self.params.get('n_classes'))
+            # logits = tf.layers.dense(inputs=sentiment_vector, units=self.params.get('n_classes'))
+            logits = tf.layers.dense(inputs=sentiment_vector, units=3)
+
+            logits = tf.squeeze(logits)
+            labels = tf.squeeze(labels)
 
             # Compute predictions
             predicted_classes = tf.argmax(logits, axis=-1)
             predictions = {
-                    'sentiment': tf.expand_dims(predicted_classes, axis=-1),
+                    'sentiment': predicted_classes,
                     'prob': tf.nn.softmax(logits),
                     'logits': logits
                 }
 
             # Compute loss.
-            losses = tf.nn.softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+            losses = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(labels=tf.one_hot(labels, depth=3), logits=logits))
+            tf.summary.scalar('loss', losses)
 
             # Compute evaluation metrics.
             accuracy = tf.metrics.accuracy(labels=labels,
                                            predictions=predicted_classes,
-                                           name='accuracy_op')
+                                           name='accuracy_op')[1]
             metrics = {'accuracy': accuracy}
             # Write to tensorboard
-            tf.summary.scalar('accuracy', accuracy[1])
+            tf.summary.scalar('accuracy', accuracy)
 
             # return losses and train_op when training
-            if self.params.get('learning_algorithm' == 'sgd'):
-                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.params.get('learning_rate'))
-            elif self.params.get('learning_algorithm' == 'adam'):
-                optimizer = tf.train.AdamOptimizer(learning_rate=self.params.get('learning_rate'))
+            if self.config.get('learning_algorithm') == 'sgd':
+                optimizer = tf.train.GradientDescentOptimizer(learning_rate=self.config.get('learning_rate'))
+            elif self.config.get('learning_algorithm') == 'adam':
+                optimizer = tf.train.AdamOptimizer(learning_rate=self.config.get('learning_rate'))
+            elif self.config.get('learning_algorithm') == 'rms':
+                optimizer = tf.train.RMSPropOptimizer(learning_rate=self.config.get('learning_rate'))
             else:
                 raise Exception('You must specify the learning algorithm.')
             train_op = optimizer.minimize(loss=losses, global_step=tf.train.get_global_step())
+            tf.logging.info('Current learning_algorithm is {}, learning_rate is {}'.format(self.config.get('learning_algorithm'),
+                                                                                           self.config.get(
+                                                                                               'learning_rate')))
             return losses, train_op, predictions, accuracy
 
     def add_lstm_layer(self, inputs, length, layer_name):

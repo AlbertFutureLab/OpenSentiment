@@ -30,6 +30,7 @@ import codecs
 
 # To add current dir to search path to prevent some errors
 sys.path.append('../')
+unk = '$UNK$'
 
 class data_utils(object):
     def __init__(self):
@@ -46,8 +47,8 @@ class data_utils(object):
             raise Exception('The file does not exist!')
 
         # Read file and generate dic and final embedding
-        word2id = []
-        embedding_to_serialized = []
+        word2id = [unk]
+        embedding_to_serialized = [np.random.uniform(-0.00001, 0.00001, 100).astype(float)]
 
         if not memory_first:
             with open(filename, 'r') as fr:
@@ -57,11 +58,12 @@ class data_utils(object):
                     word2id.append(single_line_split[0])
                     embedding_to_serialized.append(single_line_split[1:])
                     single_original_embedding = fr.readline()
+            embedding_to_serialized = np.array(embedding_to_serialized).astype(float)
         else:
             original_embedding = np.loadtxt(filename, dtype=str)
-            word2id = original_embedding[:, 0]
+            word2id.extend(original_embedding[:, 0])
             # embedding_to_serialized = np.delete(original_embedding, 0, 1).astype(float) # np.delete is time-comsuming as it would copy the array
-            embedding_to_serialized = original_embedding[:, 1:].astype(float)
+            embedding_to_serialized.extend(original_embedding[:, 1:].astype(float))
 
         # Serialize the dic and final embedding_path to disk
         self.write_gzip_serialized_file(serialized_object=word2id, filename=dic_path)
@@ -90,7 +92,7 @@ class data_utils(object):
         :return:
         """
         if os.path.exists(filename):
-            print('Warning!: The existed the same file.')
+            print('Warning!: There existed the same file.')
 
         with gzip.open(filename, 'wb') as fw:
             pickle.dump(serialized_object, fw)
@@ -163,3 +165,4 @@ class data_utils(object):
         :return: a list of ids.
         """
         return [word2id.get(x) if word2id.get(x) else word2id.get('unk') for x in text]
+

@@ -185,7 +185,7 @@ class CreateTFrecordData(object):
             }
             # parse each example
             sequence = tf.parse_single_example(serialized_example, features=features)
-            output_sequence = [sequence['inputs'], sequence['masks'], sequence['label'], sequence['length']]
+            output_sequence = [[sequence['inputs'], sequence['masks'], sequence['length']], sequence['label']]
         else:
             features = {
                 'inputs': tf.FixedLenSequenceFeature(shape=[], dtype=tf.int64),
@@ -198,7 +198,7 @@ class CreateTFrecordData(object):
             # parse each sequence example
             context_parsed, sequence = tf.parse_single_sequence_example(serialized_example, context_features=context_feature,
                                                         sequence_features=features)
-            output_sequence = [sequence['inputs'], sequence['masks'], context_parsed['label'], context_parsed['length']]
+            output_sequence = [sequence['inputs'], sequence['masks'], context_parsed['length'], context_parsed['label']]
 
         if shuffle:
             if num_enqueuing_thread < 2:

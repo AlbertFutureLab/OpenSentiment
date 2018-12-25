@@ -56,7 +56,7 @@ class crf_layer(object):
             alphas, _ = tf.nn.dynamic_rnn(
                 cell=forward_cell,
                 inputs=rest_of_input,
-                sequence_length=self.sequence_lengths,
+                sequence_length=self.sequence_lengths-1,
                 initial_state=initial_state,
                 dtype=tf.float32
             )
@@ -129,9 +129,8 @@ class crf_layer(object):
         Return the normalized output probability.
         :return:
         """
-        return tf.exp(tf.clip_by_value(
+        return tf.clip_by_value(tf.exp(
             self.crf_alpha_matrix() + self.crf_beta_matrix() - tf.expand_dims(tf.expand_dims(self.crf_log_norm(),
-                                                                                             dim=-1), dim=-1),
-            clip_value_min=10e-8, clip_value_max=10e8
-        ))
+                                                                                             dim=-1), dim=-1)
+        ), clip_value_min=10e-8, clip_value_max=1)
 

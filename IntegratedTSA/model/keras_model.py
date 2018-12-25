@@ -27,6 +27,8 @@ import tensorflow as tf
 from crf_layer import crf_layer
 import tensorflow_hub as hub
 import numpy as np
+import math
+import pandas as pd
 
 class KerasSaSentTensorflow(tf.keras.Model):
     def __init__(self):
@@ -42,9 +44,18 @@ class KerasSaSentTensorflow(tf.keras.Model):
         self.word2id = {k: v for v, k in enumerate(self.dic)}
 
         if self.params.get('word_embedding'):
+            # Here, when reading, pd is faster than np, np is smaller than serialized.
+            # So the best solution is to save with np and read with pd.
+
             # self.embedding = self.data_tool.read_gzip_serialized_file(self.config.get('embedding_path'))
-            self.embedding = np.loadtxt(fname=self.config.get('embedding_path'), dtype=np.float32)
-        self.transition = tf.get_variable(name='transition', shape=[2, 2], dtype=tf.float32, trainable=True)
+            # self.embedding = np.loadtxt(fname=self.config.get('embedding_path'), dtype=np.float32)
+
+            self.embedding = pd.read_csv(filepath_or_buffer=self.config.get('embedding_path'), sep=' ').values
+            self.embedding = tf.Variable(
+                initial_value=self.embedding, trainable=False, name='word_embedding_table', dtype=tf.float32
+            )
+        self.transition = tf.get_variable(name='transition', shape=[2, 2], dtype=tf.float32, trainable=True,
+                                          initializer=tf.random_normal_initializer)
 
         # Build some parameters of the model.
 
@@ -54,7 +65,8 @@ class KerasSaSentTensorflow(tf.keras.Model):
             name='mask_embedding',
             dtype=tf.float32,
             shape=[2, self.params.get('mask_dim')],
-            trainable=True
+            trainable=True,
+            initializer=tf.uniform_unit_scaling_initializer()
         )
 
     def call(self, inputs, training=True):
@@ -64,7 +76,7 @@ class KerasSaSentTensorflow(tf.keras.Model):
         :param training:
         :return:
         """
-        inputs, masks, length = inputs
+        inputs_seq, masks, length = inputs
         length = tf.squeeze(length)
         # Given inputs, to generate the embedding as the input to next layer.
         with tf.variable_scope(name_or_scope='input_embedding_scope', reuse=tf.AUTO_REUSE) as in_em_scope:
@@ -73,11 +85,11 @@ class KerasSaSentTensorflow(tf.keras.Model):
                 elmo = hub.Module("https://tfhub.dev/google/elmo/2", trainable=False)
                 # change inputs to a list of words to fit into the elmo
                 for i in range(len(inputs)):
-                    inputs[i] = [self.dic[v] for v in inputs[i]]
+                    inputs_seq[i] = [self.dic[v] for v in inputs_seq[i]]
 
                 # Size of input_embedding: batch_size * max_length * 1024(default)
                 input_embedding = elmo(inputs={
-                    'tokens': inputs,
+                    'tokens': inputs_seq,
                     'sequence_len': length
                 }, signature='tokens', as_dict=True)['elmo']
 
@@ -89,7 +101,7 @@ class KerasSaSentTensorflow(tf.keras.Model):
             # Use Glove/word2vec embedding as the input
             if self.params.get('word_embedding'):
                 assert self.embedding is not None
-                input_embedding = tf.nn.embedding_lookup(self.embedding, inputs, name='input_embedding')
+                input_embedding = tf.nn.embedding_lookup(self.embedding, inputs_seq, name='input_embedding')
             # Use char embedding as the supplementary embedding
             if self.params.get('char_embedding'):
                 # TODO embed char embedding here, need to think about how to store the instance.
@@ -105,13 +117,14 @@ class KerasSaSentTensorflow(tf.keras.Model):
             for i in range(self.params.get('layer_num')):
                 lstm_output = self.add_lstm_layer(inputs=lstm_output, length=length, layer_name=i)
 
-            lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
-                                                            units=self.params.get('word_dimension') + self.params.get(
-                                                                'mask_dim'))
+            if self.params.get('if_residual'):
+                lstm_output = input_embedding + tf.layers.dense(inputs=lstm_output,
+                                                                units=self.params.get('word_dimension') + self.params.get(
+                                                                    'mask_dim'))
 
         # CRF layer
         with tf.variable_scope('crf_layer', reuse=tf.AUTO_REUSE) as crf_layer_layer:
-            crf_input = tf.layers.dense(lstm_output, units=2)
+            crf_input = tf.layers.dense(lstm_output, units=2, bias_initializer=tf.glorot_uniform_initializer())
             crf_layer_ = crf_layer(inputs=crf_input, sequence_lengths=length, transition_prob=self.transition)
             crf_output = crf_layer_.crf_output_prob()[:, :, -1]  # The size should be batch_size * seq_len
 
@@ -127,7 +140,8 @@ class KerasSaSentTensorflow(tf.keras.Model):
 
         # logits layer
         with tf.variable_scope('logits', reuse=tf.AUTO_REUSE) as logits_layer:
-            logits = tf.layers.dense(inputs=sentiment_vector, units=self.params.get('n_classes'), activation='softmax')
+            logits = tf.layers.dense(inputs=sentiment_vector, units=self.params.get('n_classes'), activation='softmax',
+                                     bias_initializer=tf.glorot_uniform_initializer())
 
             return logits
 

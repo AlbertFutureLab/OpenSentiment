@@ -36,23 +36,23 @@ class paramsAndConfig(object):
             'char_embedding': False,
 
             # word_embedding && char_embedding config
-            'word_dimension': 25,
+            'word_dimension': 100,
             'char_dimension': 10,
 
             # mask dim
-            'mask_dim': 10,
+            'mask_dim': 30,
 
             # LSTM hidden units config
             'hidden_dimension': 300,
             # num of layers
-            'layer_num': 3,
+            'layer_num': 1,
             # whether to use residual network
-            'if_residual': True,
+            'if_residual': False,
             # whether to use layer normalization
             'layer_norm': False,
             # whether to use dropout and dropout rate
-            'if_dropout': True,
-            'dropout_rate': 0.4,
+            'if_dropout': False,
+            'dropout_rate': 0.1,
 
             # logits config
             'n_classes': 3,
@@ -65,7 +65,7 @@ class paramsAndConfig(object):
             'original_embedding_path': '../data/Tweets/English/embedding/original_embedding.txt',
             'embedding_path': '../data/Tweets/English/embedding/embedding.pkl',
             'learning_rate': 0.001,
-            'learning_algorithm': 'sgd',
+            'learning_algorithm': 'adam',
             'train': '../data/Tweets/English/tfrecords_file/train.tfrecords',
             'dev': '../data/Tweets/English/tfrecords_file/dev.tfrecords',
             'test': '../data/Tweets/English/tfrecords_file/test.tfrecords',
